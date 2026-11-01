@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { DEFAULTS, listLogs, planTrim, pruneBackups, resolveConfig } from '../lib/index.js'
+import { DEFAULTS, listLogs, logFileOf, planTrim, pruneBackups, readSavedConfig, resolveConfig, trimOne, writeSavedConfig } from '../lib/index.js'
 
 test('配置：默认值齐全，非法值被忽略，sessionsRoot 有兜底', () => {
   const resolved = resolveConfig({})
@@ -70,4 +70,46 @@ test('备份清理：只留最新 N 份，且只动自己命名的那批', () =>
   assert.deepEqual(removed, ['session.v4.jsonl.zstd.precompact-2026-01-01', 'session.v4.jsonl.zstd.precompact-2026-01-02'])
   assert.equal(fs.existsSync(`${log}.precompact-2026-01-03`), true, '最新的留着')
   assert.equal(fs.existsSync(`${log}.broken-2026-01-01`), true, '不碰别人命名的文件')
+})
+
+test('会话日志定位：只认合法 id，找不到就是 null', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-compact-locate-'))
+  const sessionDir = path.join(root, 'ws', 'session-abc123')
+  fs.mkdirSync(sessionDir, { recursive: true })
+  fs.writeFileSync(path.join(sessionDir, 'session.v4.jsonl.zstd'), 'x')
+  assert.equal(logFileOf(root, 'session-abc123'), path.join(sessionDir, 'session.v4.jsonl.zstd'))
+  assert.equal(logFileOf(root, 'session-nope'), null, '不存在的会话')
+  assert.equal(logFileOf(root, '../etc/passwd'), null, '不接受路径穿越')
+  assert.equal(logFileOf(root, ''), null, '空 id')
+})
+
+test('设置文件：写进去能读回来，只保留已知的键', () => {
+  const previous = process.env.HOME
+  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-compact-home-'))
+  process.env.HOME = fakeHome
+  try {
+    assert.deepEqual(readSavedConfig(), {}, '还没写过时是空对象')
+    const resolved = resolveConfig({ keepWindows: 2, dryRun: true })
+    assert.equal(writeSavedConfig(resolved), true)
+    const back = readSavedConfig()
+    assert.equal(back.keepWindows, 2)
+    assert.equal(back.dryRun, true)
+    assert.equal(Object.keys(back).includes('sessionsRoot'), true, '路径也记住')
+    assert.equal(Object.keys(back).includes('nonsense'), false, '多余键不写')
+  } finally {
+    process.env.HOME = previous
+  }
+})
+
+test('手动压缩：会话被持有（session.lock 被打开）时拒绝', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-compact-trim-'))
+  const log = path.join(dir, 'session.v4.jsonl.zstd')
+  fs.writeFileSync(log, 'not a real log')
+  const lock = path.join(dir, 'session.lock')
+  const handle = fs.openSync(lock, 'w')
+  try {
+    await assert.rejects(() => trimOne(log, 3, 1), /正被宿主打开/, '被持有的会话必须拒绝')
+  } finally {
+    fs.closeSync(handle)
+  }
 })
