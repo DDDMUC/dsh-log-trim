@@ -17,7 +17,8 @@
 #   minBytes           do not even read logs smaller than this
 #   requireModelUnchanged  only trim when the model-visible view is identical
 #   dryRun             report only, write nothing
-#   backupKeep         how many <log>.precompact-* backups to keep (0 = all)
+#   backupKeep         how many <log>.precompact-* backups to keep (0 = keep NONE - the
+#                      trimmed log then has no way back, so it is off by default)
 - insert:
     - id: dsh-session-compact
       name: 'dsh-session-compact'
