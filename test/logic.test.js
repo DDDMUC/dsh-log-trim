@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DEFAULTS, listLogs, logFileOf, planTrim, pruneBackups, readSavedConfig, resolveConfig, trimOne, writeSavedConfig } from '../lib/index.js'
+import { discoverRoots, isCurrentLog, listCurrentLogs, listLegacy } from '../lib/roots.js'
 
 test('配置：默认值齐全，非法值被忽略，sessionsRoot 有兜底', () => {
   const resolved = resolveConfig({})
@@ -111,5 +112,42 @@ test('手动压缩：会话被持有（session.lock 被打开）时拒绝', asyn
     await assert.rejects(() => trimOne(log, 3, 1), /正被宿主打开/, '被持有的会话必须拒绝')
   } finally {
     fs.closeSync(handle)
+  }
+})
+
+test('格式判定：只认当前版本，旧版本算“旧格式”', () => {
+  assert.equal(isCurrentLog('session.v4.jsonl.zstd'), true)
+  assert.equal(isCurrentLog('session.v5.jsonl.zstd'), true, '更新的版本也算当前格式')
+  assert.equal(isCurrentLog('session.v3.jsonl.zstd'), false, '旧版本不是当前日志')
+  assert.equal(isCurrentLog('session.lock'), false)
+  assert.equal(isCurrentLog('session.v4.jsonl.zstd.precompact-2026-01-01'), false, '备份不是日志')
+})
+
+test('多根发现：默认根 + 家目录下第二套 .dsh 都会被找到', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-compact-roots-'))
+  const previous = process.env.HOME
+  const previousDshHome = process.env.DSH_HOME
+  process.env.HOME = home
+  delete process.env.DSH_HOME
+  try {
+    fs.mkdirSync(path.join(home, '.dsh', 'sessions', 'ws', 'session-a'), { recursive: true })
+    fs.mkdirSync(path.join(home, 'second', '.dsh', 'sessions', 'ws', 'session-b'), { recursive: true })
+    const roots = discoverRoots()
+    assert.equal(roots.length, 2, '两个根')
+    assert.ok(roots.some((root) => root.endsWith(path.join('.dsh', 'sessions'))))
+    assert.ok(roots.some((root) => root.includes('second')))
+    // 旧格式只在旧格式清单里出现，不混进当前日志
+    const legacyDir = path.join(home, '.dsh', 'sessions', 'ws', 'session-a')
+    fs.writeFileSync(path.join(legacyDir, 'session.v4.jsonl.zstd'), 'x')
+    fs.writeFileSync(path.join(legacyDir, 'session.v3.jsonl.zstd'), 'old')
+    const current = roots.flatMap((root) => listCurrentLogs(root))
+    assert.equal(current.length, 1, '只列出 v4')
+    const legacy = listLegacy(path.join(home, '.dsh', 'sessions'))
+    assert.equal(legacy.length, 1, 'v3 被单独列出')
+    assert.equal(legacy[0].version, 3)
+  } finally {
+    process.env.HOME = previous
+    if (previousDshHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousDshHome
   }
 })
