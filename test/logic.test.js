@@ -19,9 +19,9 @@ test('配置：默认值齐全，非法值被忽略，sessionsRoot 有兜底', (
 
 test('判定：窗口不够不裁', () => {
   const config = resolveConfig({})
-  const plan = planTrim({ events: 1000, windows: 3, droppable: 900, modelBefore: 10, modelAfter: 10 }, config)
-  assert.equal(plan.should, false)
-  assert.match(plan.reason, /只有 3 个窗口/)
+  const plan = planTrim({ events: 1000, windows: 2, droppable: 900, modelBefore: 10, modelAfter: 10 }, config)
+  assert.equal(plan.should, false, '2 窗等于默认保留数，不裁')
+  assert.match(plan.reason, /只有 2 个窗口/)
 })
 
 test('判定：可丢弃条数或占比不够不裁', () => {
@@ -44,7 +44,7 @@ test('判定：模型视图会变就保守跳过', () => {
 test('判定：都满足就裁，并说明理由', () => {
   const plan = planTrim({ events: 29497, windows: 10, droppable: 20116, modelBefore: 1000, modelAfter: 1000 }, resolveConfig({}))
   assert.equal(plan.should, true)
-  assert.match(plan.reason, /窗口 10 → 3/)
+  assert.match(plan.reason, /窗口 10 → 2/)
   assert.match(plan.reason, /68\.2%/)
 })
 
@@ -109,7 +109,7 @@ test('手动压缩：会话被持有（session.lock 被打开）时拒绝', asyn
   const lock = path.join(dir, 'session.lock')
   const handle = fs.openSync(lock, 'w')
   try {
-    await assert.rejects(() => trimOne(log, 3, 1), /正被宿主打开/, '被持有的会话必须拒绝')
+    await assert.rejects(() => trimOne(log, resolveConfig({})), /正被宿主打开/, '被持有的会话必须拒绝')
   } finally {
     fs.closeSync(handle)
   }

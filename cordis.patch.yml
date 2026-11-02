@@ -11,7 +11,7 @@
 #
 #   enabled            master switch
 #   scanOnBoot         scan once when the host starts (the only unheld window)
-#   keepWindows        keep the last N checkpoint windows
+#   keepWindows        keep the last N checkpoint windows (minimum 1, default 2)
 #   minDroppableEvents skip unless at least this many events would go
 #   minRatio           ... and they are at least this share of the log
 #   minBytes           do not even read logs smaller than this
@@ -25,10 +25,11 @@
       config:
         enabled: true
         scanOnBoot: true
-        keepWindows: 3
+        keepWindows: 2
         minDroppableEvents: 500
         minRatio: 0.2
         minBytes: 1048576
         requireModelUnchanged: true
         dryRun: false
+        mode: window
         backupKeep: 1
