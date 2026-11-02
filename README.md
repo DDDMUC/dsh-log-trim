@@ -84,6 +84,14 @@ mv session.v4.jsonl.zstd.precompact-<时间戳> session.v4.jsonl.zstd
 
 ### 更新日志
 
+**0.2.0** —— 改名 **dsh-log-trim**（中文：日志裁剪）。
+
+- **为什么改名**：原名 `dsh-session-compact` 会被读成"压缩会话上下文"——那是宿主自己的压缩（把旧消息总结成一条摘要）。本插件做的是**另一件事**：把模型早已看不到的旧窗口从**日志文件**里切掉，让文件变小。名字必须自己说明这一点。
+
+- 旧名 **`dsh-session-compact` 已弃用**，功能等价；设置与扫描记忆会从旧目录 `~/.dsh/dsh-session-compact/` **只读迁移**一次，之后的写入只走新目录 `~/.dsh/dsh-log-trim/`。
+
+- 接口前缀随之变为 `/api/dsh-log-trim/*`；设置页仍在「设置 → 插件 → 日志裁剪」那一行的配置箭头里。
+
 **0.1.5** —— 设置卡上架；两个根都能扫了；旧格式日志可以清掉。
 
 - **设置卡（和 dsh-free-search 并排）**：注册在 `plugins.row.config`（键 `dsh-log-trim#dsh-log-trim`）与 `plugins.bundle.config`（键 = 包名），所以「设置 → 插件」里本插件那一行右侧有配置箭头。卡里是 5 个数值 + 4 个开关 + 「保存」「现在扫一遍」「填回默认值」，外加**备份列表**（会话 id / 大小 / 时间 / 目录）和每行一个「打开目录」。

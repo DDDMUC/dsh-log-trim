@@ -1,6 +1,6 @@
 {
   "name": "dsh-log-trim",
-  "version": "0.2.0",
+  "version": "0.1.9",
   "description": "Trim idle DeepSeek Harness session logs at startup: keep the last N windows, cut the ones the model can no longer see, and verify the result with the host's own format, session and projection validators before writing. Not context compaction: this shrinks the log file, it does not summarise the conversation.",
   "type": "module",
   "main": "lib/index.js",
