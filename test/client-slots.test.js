@@ -49,14 +49,14 @@ test('package 声明了客户端半部，并且在插件管理器认得的位置
   assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml', '宿主补丁仍在')
 
   const loaded = loadClientHalf()
-  assert.equal(loaded.id, 'dsh-session-compact')
+  assert.equal(loaded.id, 'dsh-log-trim')
   assert.deepEqual(loaded.exports.inject, ['slots'], '只需要 slots')
 
   const registered = []
   loaded.exports.apply({ slots: { inject: (name, build) => build(), register: (meta) => { registered.push(meta); return () => {} } } })
   const seats = registered.map((meta) => `${meta.name} | ${meta.key}`).sort()
   assert.deepEqual(seats, [
-    'plugins.bundle.config | dsh-session-compact',
-    'plugins.row.config | dsh-session-compact#dsh-session-compact',
+    'plugins.bundle.config | dsh-log-trim',
+    'plugins.row.config | dsh-log-trim#dsh-log-trim',
   ], '和 dsh-free-search 并排的那两个座位')
 })

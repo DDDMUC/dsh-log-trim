@@ -1,7 +1,7 @@
 {
-  "name": "dsh-session-compact",
-  "version": "0.1.5",
-  "description": "Compact idle DeepSeek Harness session logs at startup: keep the last N windows, drop the ones the model can no longer see, and verify the result with the host's own format, session and projection validators before writing.",
+  "name": "dsh-log-trim",
+  "version": "0.2.0",
+  "description": "Trim idle DeepSeek Harness session logs at startup: keep the last N windows, cut the ones the model can no longer see, and verify the result with the host's own format, session and projection validators before writing. Not context compaction: this shrinks the log file, it does not summarise the conversation.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -19,15 +19,16 @@
     "dsh",
     "dsh-plugin",
     "session",
-    "compact",
     "log",
     "trim",
-    "windows"
+    "prune",
+    "windows",
+    "size"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DDDMUC/dsh-session-compact.git"
+    "url": "git+https://github.com/DDDMUC/dsh-log-trim.git"
   },
   "engines": {
     "node": ">=22"

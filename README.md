@@ -1,4 +1,4 @@
-# dsh-session-compact
+# dsh-log-trim
 
 启动时自动裁掉空闲会话的历史窗口：只保留最后 N 个窗口，把模型早已看不到的那部分从日志里切掉，**裁剪结果先过宿主自己的三层校验器，验不过就不落盘**。
 
@@ -47,8 +47,8 @@ DSH 的会话日志是只增不减的，而宿主的压缩是**累积**的：每
 ## 路由（仅本机）
 
 ```
-GET  /api/dsh-session-compact/status   上次扫描结果 + 生效配置
-POST /api/dsh-session-compact/run      立刻再扫一遍
+GET  /api/dsh-log-trim/status   上次扫描结果 + 生效配置
+POST /api/dsh-log-trim/run      立刻再扫一遍
 ```
 
 想手动裁一次又不想等重启：关掉那个会话的标签页（若宿主仍未释放，就退出宿主后在终端跑 `dsh-edit-turn` 的 `tools/compact-session.mjs --apply`）。
@@ -86,9 +86,9 @@ mv session.v4.jsonl.zstd.precompact-<时间戳> session.v4.jsonl.zstd
 
 **0.1.5** —— 设置卡上架；两个根都能扫了；旧格式日志可以清掉。
 
-- **设置卡（和 dsh-free-search 并排）**：注册在 `plugins.row.config`（键 `dsh-session-compact#dsh-session-compact`）与 `plugins.bundle.config`（键 = 包名），所以「设置 → 插件」里本插件那一行右侧有配置箭头。卡里是 5 个数值 + 4 个开关 + 「保存」「现在扫一遍」「填回默认值」，外加**备份列表**（会话 id / 大小 / 时间 / 目录）和每行一个「打开目录」。
+- **设置卡（和 dsh-free-search 并排）**：注册在 `plugins.row.config`（键 `dsh-log-trim#dsh-log-trim`）与 `plugins.bundle.config`（键 = 包名），所以「设置 → 插件」里本插件那一行右侧有配置箭头。卡里是 5 个数值 + 4 个开关 + 「保存」「现在扫一遍」「填回默认值」，外加**备份列表**（会话 id / 大小 / 时间 / 目录）和每行一个「打开目录」。
 
-- **配置怎么存**：`cordis.patch.yml` 里那一行的 `config:` 只是**初始值**；卡片保存的值写到 `~/.dsh/dsh-session-compact/config.json` 并优先于它。保存即时生效，不必重启。
+- **配置怎么存**：`cordis.patch.yml` 里那一行的 `config:` 只是**初始值**；卡片保存的值写到 `~/.dsh/dsh-log-trim/config.json` 并优先于它。保存即时生效，不必重启。
 
 - **三个新接口**：`GET/POST /config`（读/存设置）、`POST /trim`（裁**指定**一个会话）、`GET/POST /legacy`（旧格式日志清单；`{"confirm":true}` 才删）。
 

@@ -1,11 +1,11 @@
-# dsh-session-compact bundle patch: inserts the plugin row into the profile roster.
+# dsh-log-trim bundle patch: inserts the plugin row into the profile roster.
 #
 # The node half scans the session root once at startup — the only window in which
 # a session is not yet held by the host — and compacts the logs that are past the
 # thresholds. It also answers a settings bridge and a per-session trim route.
 #
 # The `config:` block below is the row's INITIAL value. Whatever the settings card
-# writes lives in ~/.dsh/dsh-session-compact/config.json and wins over this block
+# writes lives in ~/.dsh/dsh-log-trim/config.json and wins over this block
 # on the next load, so editing here is how a fresh install is configured while the
 # card is how a running one is changed.
 #
@@ -20,8 +20,8 @@
 #   backupKeep         how many <log>.precompact-* backups to keep (0 = keep NONE - the
 #                      trimmed log then has no way back, so it is off by default)
 - insert:
-    - id: dsh-session-compact
-      name: 'dsh-session-compact'
+    - id: dsh-log-trim
+      name: 'dsh-log-trim'
       config:
         enabled: true
         scanOnBoot: true
