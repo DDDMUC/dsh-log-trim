@@ -30,6 +30,17 @@ DSH 的会话日志是只增不减的，而宿主的压缩是**累积**的：每
 6. 通过才把原文件改名成 `<日志>.precompact-<时间戳>`，暂存文件上位；
 7. 按 `backupKeep` 清理旧备份（只动自己命名的那批）。
 
+
+## 关于 `data.stream`（流式回放记录）
+
+`assistant/message.data.stream` 是模型输出的**原始增量**（block-start、reasoning-chunks、
+tool-call-chunks、block-end、usage、finish，带 `dt` 与 `time0`）。它与
+`data.message.content` **逐块重复**——删掉不丢正文、不丢思考文本，只丢“逐字回放的动画与时序”。
+
+实测（86 份日志）：这部分占**原始 JSON 的 48.3%、压缩后的 43.4%**。
+所以裁剪时只保留最近 `streamKeepTurns`（默认 3）轮，更早的删掉；行数、`seq`、表面都不动，
+因此不触发重编号，也不影响「模型视图不变」的闸门。
+
 ## 配置
 
 | 键 | 默认 | 说明 |
@@ -38,6 +49,7 @@ DSH 的会话日志是只增不减的，而宿主的压缩是**累积**的：每
 | `scanOnBoot` | `true` | 启动时自动扫一遍 |
 | `keepWindows` | `3` | 保留最后几个窗口（只数带检查点的对话窗；切点落在「检查点保留的尾巴起点」，见下） |
 | `minDroppableEvents` | `500` | 可丢弃事件数低于它就跳过 |
+| `streamKeepTurns` | `3` | 保留最近几轮的 `assistant/message.data.stream`（流式回放记录）；更早的删掉 |
 | `minRatio` | `0.2` | 可丢弃占比低于它就跳过 |
 | `requireModelUnchanged` | `true` | 模型视图会变就保守跳过 |
 | `dryRun` | `false` | 只报告不落盘 |
