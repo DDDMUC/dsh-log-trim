@@ -19,6 +19,17 @@ test('配置：默认值齐全，非法值被忽略，sessionsRoot 有兜底', (
   assert.equal(custom.minDroppableEvents, DEFAULTS.minDroppableEvents, '负数不接受')
 })
 
+test('配置：重写兜底默认关，要开得显式打开', () => {
+  // rebuild 是唯一"凭空造行"的路径，宿主对行的隐式要求漏一个就是整份日志打不开
+  // （time、stream、受保护的 system 头，三个都踩过）。默认不自动走它。
+  assert.equal(DEFAULTS.rebuildFallback, false, '默认值必须是关')
+  assert.equal(resolveConfig({}).rebuildFallback, false)
+  assert.equal(resolveConfig({ rebuildFallback: true }).rebuildFallback, true)
+  assert.equal(resolveConfig({ rebuildFallback: 'yes' }).rebuildFallback, false, '非布尔值不接受')
+  // 显式选 rebuild 模式仍然可用：那是人的决定，不是兜底。
+  assert.equal(resolveConfig({ mode: 'rebuild' }).mode, 'rebuild')
+})
+
 test('判定：窗口不够不裁', () => {
   const config = resolveConfig({})
   const plan = planTrim({ events: 1000, windows: 2, droppable: 900, modelBefore: 10, modelAfter: 10 }, config)
