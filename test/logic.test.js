@@ -169,6 +169,31 @@ test('重写：每一行都带 time，缺了整份日志都打不开', () => {
   assert.ok(carried > rebuilt.length / 2, `沿用源时间的行只有 ${carried}/${rebuilt.length}`)
 })
 
+test('重写：assistant/message 保留 stream，否则宿主判 settlement 非法', () => {
+  // 宿主的 seed 边界校验（assertAssistantSettlementShape）要求
+  // `Array.isArray(data.stream)`；缺了就是
+  // `seed assistant/message at index N has invalid settlement fields`，
+  // 整份日志打不开。stream 加载时不重放，只原样留着。
+  const stream = [{ type: 'chunk', time: 1, chunk: { type: 'block-start', index: 0, blockType: 'text' } }]
+  const events = [
+    systemMessage(1),
+    appended(2, 'turn/start'),
+    appended(3, 'user/message', { message: { role: 'user', content: [{ type: 'text', text: 'hi' }] } }),
+    appended(4, 'assistant/message', {
+      turn: 1,
+      step: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+      stream,
+    }),
+  ]
+  const rebuilt = rebuildSurface(events)
+  const assistant = rebuilt.filter((event) => event.type === 'assistant/message')
+  assert.equal(assistant.length, 1)
+  assert.deepEqual(assistant[0].data.stream, stream, 'stream 必须原样带过去')
+  assert.equal(Number.isSafeInteger(assistant[0].data.turn), true)
+  assert.equal(Number.isSafeInteger(assistant[0].data.step), true)
+})
+
 test('列举：只认会话日志文件名，目录结构不对就跳过', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-compact-list-'))
   const workspace = path.join(root, '--Users-x--')
