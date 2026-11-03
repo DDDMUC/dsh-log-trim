@@ -5,6 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { DEFAULTS, listLogs, logFileOf, planTrim, pruneBackups, readSavedConfig, resolveConfig, trimOne, writeSavedConfig } from '../lib/index.js'
 import { discoverRoots, isCurrentLog, listCurrentLogs, listLegacy } from '../lib/roots.js'
+import { checkpointTailStart, foldSurface, keepLastWindows } from '../lib/vendor/compact-session.mjs'
+import { rebuildSurface } from '../lib/lossless.js'
 
 test('配置：默认值齐全，非法值被忽略，sessionsRoot 有兜底', () => {
   const resolved = resolveConfig({})
@@ -46,6 +48,125 @@ test('判定：都满足就裁，并说明理由', () => {
   assert.equal(plan.should, true)
   assert.match(plan.reason, /窗口 10 → 2/)
   assert.match(plan.reason, /68\.2%/)
+})
+
+// --- the window definition this plugin cuts by -------------------------------
+
+/**
+ * One event, shaped the way the host writes them: only content events carry
+ * `surfaceOp: 'append'`; the bookkeeping ones (turn/start, checkpoints) carry
+ * none, or the replace range the checkpoint performed.
+ */
+function appended(seq, type, data = {}) {
+  const event = { seq, time: seq, type, data }
+  if (type !== 'turn/start') event.surfaceOp = 'append'
+  return event
+}
+
+/** The session header the trimmer has to carry over: it needs real text. */
+function systemMessage(seq) {
+  return appended(seq, 'system/message', {
+    message: { role: 'system', content: [{ type: 'text', text: 'You are DeepSeek Harness.' }] },
+  })
+}
+
+/**
+ * A session with two compactions, laid out the way the host writes one:
+ * the checkpoint REPLACES the older range and is FOLLOWED by units it keeps
+ * verbatim (the retained tail). Those tail units sit before the checkpoint's own
+ * seq, which is exactly why cutting at the checkpoint drops live context.
+ */
+function twoCompactionSession() {
+  // The checkpoint carries the summary text it stands for; an empty one is a
+  // silent carrier and would be dropped by the trimmer instead of kept.
+  const checkpoint = (seq, compactionId, startSeq, endSeq) => ({
+    seq,
+    time: seq,
+    type: 'user/message',
+    data: {
+      source: { kind: 'compact-checkpoint', compactionId },
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: 'This is an automatically generated checkpoint condensing an earlier span of the conversation (c' + compactionId + ')',
+          },
+        ],
+      },
+    },
+    surfaceOp: { op: 'replace', startSeq, endSeq },
+  })
+  return [
+    systemMessage(1),
+    appended(2, 'turn/start'),
+    appended(3, 'user/message'),
+    appended(4, 'assistant/message'),
+    appended(5, 'turn/start'),
+    appended(6, 'user/message'),
+    appended(7, 'assistant/message'),
+    checkpoint(8, 'c1', 3, 4),
+    appended(9, 'turn/start'),
+    appended(10, 'user/message'),
+    checkpoint(11, 'c2', 5, 8),
+    appended(12, 'turn/start'),
+    appended(13, 'assistant/message'),
+  ]
+}
+
+test('窗口：切点落在检查点保留的尾巴起点，而不是检查点自己', () => {
+  const events = twoCompactionSession()
+  // c2 replaced [5,8] and kept what follows: the window it opens starts at 9.
+  assert.equal(checkpointTailStart(events, 11), 9)
+  // A checkpoint the log does not describe, or one with no replaced range, keeps
+  // its own seq as the boundary.
+  assert.equal(checkpointTailStart(events, 999), 999)
+  assert.equal(checkpointTailStart([appended(4, 'user/message')], 4), 4)
+
+  const kept = keepLastWindows(events, 1)
+  assert.equal(kept.cutSeq, 9, 'the cut is the tail start, snapped back to its turn')
+  assert.notEqual(kept.cutSeq, 11, 'cutting at the checkpoint itself is the regression')
+  assert.equal(kept.windows, 3, 'the log still had three windows')
+  assert.equal(kept.dropped > 0, true, 'and the trim really did remove events')
+  for (const seq of [9, 10]) {
+    assert.equal(kept.events.some((e) => e.seq === seq), true, 'retained tail unit ' + seq + ' must survive')
+  }
+  assert.equal(kept.events.some((e) => e.seq === 6), false, 'the earlier window itself does not')
+})
+
+test('重写：产出的日志没有替换记录、没有压缩记录，seq 连续', () => {
+  const events = twoCompactionSession()
+  const rebuilt = rebuildSurface(events)
+  assert.equal(rebuilt.some((event) => event.surfaceOp !== undefined && typeof event.surfaceOp === 'object'), false, 'no replace record survives')
+  assert.equal(rebuilt.some((event) => String(event.type).startsWith('compaction/')), false, 'no compaction record survives')
+  assert.deepEqual(rebuilt.map((event) => event.seq), rebuilt.map((_, index) => index), 'seqs are dense')
+  // The visible messages are still all there, in order: the checkpoints become
+  // ordinary messages, and the turns are rebuilt around them.
+  const visibleBefore = foldSurface(events).visible.length
+  const visibleAfter = foldSurface(rebuilt).visible.length
+  assert.equal(visibleAfter, visibleBefore, 'the rebuilt log shows the same number of surface nodes')
+})
+
+test('重写：每一行都带 time，缺了整份日志都打不开', () => {
+  // 宿主的行格式把 time 列为必填（EVENT_REQUIRED），缺一个就
+  // `released v2 row 0 lacks required field time`，整份日志拒收。
+  // 重写是唯一"凭空造行"的路径，所以这里逐行查。
+  const events = twoCompactionSession()
+  const rebuilt = rebuildSurface(events)
+  for (const event of rebuilt) {
+    assert.equal(Number.isSafeInteger(event.time), true, `seq ${event.seq}（${event.type}）缺 time`)
+  }
+  // 时间线按日志顺序非递减，否则界面里的时间是乱的。
+  for (let index = 1; index < rebuilt.length; index += 1) {
+    assert.ok(
+      rebuilt[index].time >= rebuilt[index - 1].time,
+      `seq ${rebuilt[index].seq} 的时间早于上一行（${rebuilt[index].time} < ${rebuilt[index - 1].time}）`,
+    )
+  }
+  // 有源事件的行沿用源事件的时间，而不是统一盖一个 now。
+  const sourceTimes = new Set(events.map((event) => event.time))
+  const carried = rebuilt.filter((event) => sourceTimes.has(event.time)).length
+  assert.ok(carried > rebuilt.length / 2, `沿用源时间的行只有 ${carried}/${rebuilt.length}`)
 })
 
 test('列举：只认会话日志文件名，目录结构不对就跳过', () => {
