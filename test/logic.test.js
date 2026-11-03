@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { DEFAULTS, listLogs, logFileOf, planTrim, pruneBackups, readSavedConfig, resolveConfig, trimOne, writeSavedConfig } from '../lib/index.js'
+import { DEFAULTS, listLogs, logFileOf, planTrim, pruneBackups, readSavedConfig, repairIfCorrupt, resolveConfig, restoreFromBackup, trimOne, writeSavedConfig } from '../lib/index.js'
 import { discoverRoots, isCurrentLog, listCurrentLogs, listLegacy } from '../lib/roots.js'
 import { checkpointTailStart, foldSurface, keepLastWindows } from '../lib/vendor/compact-session.mjs'
 import { rebuildSurface } from '../lib/lossless.js'
@@ -192,6 +192,50 @@ test('重写：assistant/message 保留 stream，否则宿主判 settlement 非�
   assert.deepEqual(assistant[0].data.stream, stream, 'stream 必须原样带过去')
   assert.equal(Number.isSafeInteger(assistant[0].data.turn), true)
   assert.equal(Number.isSafeInteger(assistant[0].data.step), true)
+})
+
+test('还原：外来路径与不合格的备份都拒绝，装不上的日志会被报出来', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'restore-'))
+  const logFile = path.join(dir, 'session.v4.jsonl.zstd')
+  fs.writeFileSync(logFile, 'garbage')
+  const config = resolveConfig({})
+  const outside = path.join(os.tmpdir(), path.basename(logFile) + '.precompact-其它会话')
+  assert.equal((await restoreFromBackup(logFile, outside, config)).ok, false, 'a backup outside the session dir is refused')
+  const bad = logFile + '.precompact-1'
+  fs.writeFileSync(bad, 'also garbage')
+  const refused = await restoreFromBackup(logFile, bad, config)
+  assert.equal(refused.ok, false, 'a backup that cannot load is refused')
+  assert.match(String(refused.error), /备份自己就不合格/)
+  const repaired = await repairIfCorrupt(logFile, config)
+  assert.equal(repaired.failed, true, 'a corrupt log with no usable backup is reported, never silently trimmed')
+})
+
+test('重写：可见表面里没有 system 消息时，也要从日志里捞一个顶到最前', () => {
+  // 宿主规定表面第一个节点必须是受保护的 system/message；压缩会把旧的 system
+  // 消息替换掉，于是它不在 `visible` 里。只从 visible 挑就一个也挑不到，重写出来
+  // 的日志表面以 user/assistant 开头，宿主读的时候报
+  // `system/message requires a protected first surface head`，整份拒收。
+  const events = [
+    systemMessage(1),
+    appended(2, 'turn/start'),
+    appended(3, 'user/message', { message: { role: 'user', content: [{ type: 'text', text: 'hi' }] } }),
+    appended(4, 'assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] }, stream: [] }),
+    {
+      seq: 5,
+      time: 5,
+      type: 'user/message',
+      data: { turn: 2, message: { role: 'user', content: [{ type: 'text', text: 'checkpoint' }] } },
+      surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 },
+      sourceEventSeqs: [1],
+    },
+  ]
+  // The fixture really does shadow the head out of the visible surface.
+  assert.deepEqual(foldSurface(events).visible, [3, 4, 5])
+  const rebuilt = rebuildSurface(events)
+  const SURFACE = new Set(['system/message', 'user/message', 'developer/message', 'assistant/message', 'tool/result'])
+  const first = rebuilt.find((event) => SURFACE.has(event.type))
+  assert.equal(first?.type, 'system/message', '第一个表面节点必须是 system/message')
+  assert.equal(first.data.message.content[0].text, 'You are DeepSeek Harness.')
 })
 
 test('列举：只认会话日志文件名，目录结构不对就跳过', () => {
