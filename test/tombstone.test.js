@@ -62,3 +62,19 @@ test('隔离：only 只返回指定根目录，不追加默认根', () => {
   assert.ok(all.length >= only.length)
   if (all.length > 1) assert.ok(all.some((entry) => entry !== path.resolve(dir)), '默认模式确实追加了别的根')
 })
+
+// 自动检测：装了 ai-studio 系（会持续写载体）时，未显式设置就默认打开折叠。
+import { hasAggregatedWriters } from '../lib/index.js'
+
+test('自动检测：装了 edit/rerun/delete 或聚合包就认定会写载体', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'detect-'))
+  const profile = path.join(home, '.dsh', 'profiles', 'desktop')
+  fs.mkdirSync(profile, { recursive: true })
+  const write = (manifest) => fs.writeFileSync(path.join(profile, 'package.json'), JSON.stringify(manifest))
+  write({ dependencies: {} })
+  assert.equal(hasAggregatedWriters(home), false, '空 profile 不算装了')
+  write({ dsh: { profile: { bundles: ['dsh-as-aistudio'] } } })
+  assert.equal(hasAggregatedWriters(home), true, '聚合包在 bundles 里也算')
+  write({ dependencies: { 'dsh-rerun-turn': '0.2.7' } })
+  assert.equal(hasAggregatedWriters(home), true, '单装组件也算')
+})
