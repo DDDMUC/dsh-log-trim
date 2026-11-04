@@ -31,11 +31,12 @@ test('只留最近 N 轮的 stream，正文与行数不变', () => {
   assert.equal(out.length, events.length, '行数不变')
   assert.equal(stripped, 3, '前 3 轮的 stream 被删')
   const byTurn = new Map(out.filter((event) => event.type === 'assistant/message').map((event) => [event.data.turn, event]))
-  assert.equal(byTurn.get(1).data.stream, undefined)
-  assert.equal(byTurn.get(2).data.stream, undefined)
-  assert.equal(byTurn.get(3).data.stream, undefined)
-  assert.ok(byTurn.get(4).data.stream, '第 4 轮（倒数第二）保留')
-  assert.ok(byTurn.get(5).data.stream, '最后一轮保留')
+  // 不能整条删：宿主对结算字段有校验，空数组才是合法的“没有回放记录”。
+  assert.deepEqual(byTurn.get(1).data.stream, [])
+  assert.deepEqual(byTurn.get(2).data.stream, [])
+  assert.deepEqual(byTurn.get(3).data.stream, [])
+  assert.ok(byTurn.get(4).data.stream.length > 0, '第 4 轮（倒数第二）保留')
+  assert.ok(byTurn.get(5).data.stream.length > 0, '最后一轮保留')
   assert.deepEqual(byTurn.get(1).data.message, { role: 'assistant', content: [{ type: 'reasoning', text: 'thinking 1' }] }, '正文不受影响')
 })
 
