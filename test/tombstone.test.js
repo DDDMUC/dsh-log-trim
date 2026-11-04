@@ -44,3 +44,21 @@ test('标注：别人的载体一律不碰', () => {
   const foreign = deleteCarrier(10, 5, 'plugin:dsh-edit-turn')
   assert.deepEqual(annotateDeletes([foreign]).events[0].data.source, foreign.data.source)
 })
+
+// 隔离：`discoverRoots(extra, { only: true })` 绝不能追加默认根目录。
+// 这条测试来自一次真实事故：用 $HOME 做“隔离”在 macOS 上无效（os.homedir 不读它），
+// 结果一次“测试扫描”跑到了用户真实的日志上。
+import { discoverRoots } from '../lib/roots.js'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
+test('隔离：only 只返回指定根目录，不追加默认根', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roots-'))
+  const only = discoverRoots(dir, { only: true })
+  assert.deepEqual(only, [path.resolve(dir)])
+  const all = discoverRoots(dir)
+  assert.ok(all.includes(path.resolve(dir)), '默认模式包含指定目录')
+  assert.ok(all.length >= only.length)
+  if (all.length > 1) assert.ok(all.some((entry) => entry !== path.resolve(dir)), '默认模式确实追加了别的根')
+})
