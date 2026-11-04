@@ -75,3 +75,18 @@ test('账本：坏文件当成空账本，清空后文件消失', () => {
   assert.equal(clearLedger(home), true)
   assert.equal(fs.existsSync(ledgerPath(home)), false)
 })
+
+// 回归：`carriers` 曾经只在 `flattenOnBoot !== false` 的块里声明，折叠默认关时
+// 扫描走到「清理已遮蔽要不要跳过」那一行就抛 ReferenceError——/run 直接 400、
+// 开机扫描永远完不成。
+import { runScan, resolveConfig } from '../lib/index.js'
+
+test('扫描：折叠关着（默认）也能跑完，不再抛 ReferenceError', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'scan-'))
+  fs.mkdirSync(path.join(root, 'ws'), { recursive: true })
+  const config = resolveConfig({ sessionsRoot: root, isolateRoots: true, flattenOnBoot: false })
+  assert.equal(config.flattenOnBoot, false, '折叠关着，正是会踩到的那条路')
+  const summary = await runScan(config, {})
+  assert.equal(summary.scanned, 0)
+  assert.deepEqual(summary.failed, [])
+})
