@@ -15,6 +15,7 @@ function turns(count) {
       seq: seq++,
       data: {
         turn,
+        usage: { inputTokens: 10, outputTokens: 5 },
         stream: [{ type: 'chunk', chunk: { type: 'block-end', block: { type: 'reasoning', text: `thinking ${turn}` } } }],
         message: { role: 'assistant', content: [{ type: 'reasoning', text: `thinking ${turn}` }] },
       },
@@ -45,4 +46,17 @@ test('keepTurns 为 Infinity 时一条都不删', () => {
   const { events: out, stripped } = stripOldStreams(events, Infinity)
   assert.equal(stripped, 0)
   assert.equal(out.filter((event) => event.data?.stream).length, 3)
+})
+
+test('缺 usage 的行不清：宿主会拿 stream 兜底算用量', () => {
+  const events = turns(3)
+  for (const event of events) if (event.type === 'assistant/message') delete event.data.usage
+  const { stripped } = stripOldStreams(events, 0)
+  assert.equal(stripped, 0, '没有 usage 的行一条都不动')
+})
+
+test('keepTurns = 0 表示全清', () => {
+  const events = turns(3)
+  const { stripped } = stripOldStreams(events, 0)
+  assert.equal(stripped, 3)
 })
