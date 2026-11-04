@@ -55,8 +55,5 @@ test('package 声明了客户端半部，并且在插件管理器认得的位置
   const registered = []
   loaded.exports.apply({ slots: { inject: (name, build) => build(), register: (meta) => { registered.push(meta); return () => {} } } })
   const seats = registered.map((meta) => `${meta.name} | ${meta.key}`).sort()
-  assert.deepEqual(seats, [
-    'plugins.bundle.config | dsh-log-trim',
-    'plugins.row.config | dsh-log-trim#dsh-log-trim',
-  ], '和 dsh-free-search 并排的那两个座位')
+  assert.deepEqual(seats, ['plugins.bundle.config | dsh-log-trim'], '只挂在包自己的页面上（不再注册行级入口）')
 })
