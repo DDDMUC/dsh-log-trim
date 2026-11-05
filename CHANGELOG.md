@@ -2,6 +2,16 @@
 
 ## 中文
 
+**0.7.0** —— 开机扫描搬进 worker；裁剪内核改异步；账本记录被裁部分的用量。
+
+- 整轮扫描在 `node:worker_threads` 里跑（`lib/worker.mjs`），主线程只等一份摘要；worker 起不来时退回主线程。
+- `readLogAsync` / `encodeLogAsync` 分片让出事件循环（没有用 zstd 异步 API：千帧文件一帧一次线程池往返实测 4.7 s → 11.7 s）；
+  会话之间 `setImmediate` 一次；开机扫描延后 3 秒，把首屏让开。
+- `keepLastWindows` 两处性能修正（O(n²) 的 `find` 套 `map`、被裁事件的重复 `structuredClone`）。
+- 账本新增被裁部分的用量差额：每条记录带 `dropped.usage` / `dropped.turns` / `dropped.events`，
+  `totals` 累计四项 token 与 `turnsRemoved`。读者用「现值 + 已裁」还原真实总量，不必保留原始数据。
+- 裁剪内核与 `dsh-edit-turn` 的 `tools/compact-session.mjs` 保持逐字一致（`npm run sync:vendor`）。
+
 **0.6.1** —— 修：扫描直接崩（`/run` 400、开机扫描永远完不成）；扫描改成后台执行。
 
 - `carriers` 原来只在「折叠开着」的分支里声明，而折叠默认关——扫描走到「清理已遮蔽要不要跳过」那一行就抛
