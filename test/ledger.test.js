@@ -90,3 +90,17 @@ test('扫描：折叠关着（默认）也能跑完，不再抛 ReferenceError',
   assert.equal(summary.scanned, 0)
   assert.deepEqual(summary.failed, [])
 })
+
+test('账本：被裁掉的 usage 记成差额，且可加回真实总量', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'))
+  const withUsage = (count, checkpointCount, usage) =>
+    events(count, checkpointCount).map((event, index) => (index < 2 ? { ...event, data: { ...event.data, usage } } : event))
+  const before = withUsage(10, 2, { inputTokens: 100, outputTokens: 10, totalTokens: 110, cacheReadTokens: 40 })
+  const after = before.slice(4)
+  const totals = recordTrim({ sessionId: 'session-u', mode: 'window', before, after }, home)
+  assert.equal(totals.usage.inputTokens, 200, '被裁掉 2 条 usage')
+  assert.equal(totals.usage.outputTokens, 20)
+  const entry = readLedger(home).sessions['session-u']
+  assert.equal(entry.trims[0].dropped.usage.inputTokens, 200)
+  assert.equal(entry.trims[0].dropped.events, 4)
+})
