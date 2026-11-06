@@ -2,6 +2,15 @@
 
 ## 中文
 
+**0.7.3** —— 窗口裁剪能处理“迟到”的 tool/result（大会话裁不下去的原因）。
+
+- 工具结果可能晚到：它挂在很早的 turn/step 上，却在日志很后面才写下来。裁剪从中间切掉一段并重编号后，
+  这些行落在 `step/end` 之后、下一段 `step/start` 之前，宿主的格式层报
+  `tool/result does not match an open turn and step`，整份日志被拒——窗口数因此一直停在原样。
+- 新增 `repairLateToolResults()`：按开放 turn/step 模拟，把错位的结果挪回它自己那一步（找不到就挂到后面第一个
+  step），并丢弃“调用已被裁掉”的孤儿结果（否则报 `has no advertised tool lifecycle`）；挪动后重新编号让引用跟上。
+- 验证：本机会话 13 MB / 9,079 事件，裁剪成功 → 6,701 事件、窗口 4→3；`node --test` 57/57。
+
 **0.7.2** —— 让「重建」真正可用：本机 104 份真实日志全部通过宿主校验（此前 18 份被拒）。
 
 - **标题**：`session/title` 不再放在 head，改为最后追加，并把 `messageSeqs` 指向重建后更早的
