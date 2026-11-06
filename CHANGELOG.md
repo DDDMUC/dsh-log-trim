@@ -2,6 +2,20 @@
 
 ## 中文
 
+**0.7.2** —— 让「重建」真正可用：本机 104 份真实日志全部通过宿主校验（此前 18 份被拒）。
+
+- **标题**：`session/title` 不再放在 head，改为最后追加，并把 `messageSeqs` 指向重建后更早的
+  `user/message`（来源必须是用户）；用户自己起的标题则按规则留空。
+- **工具通知**：`developer/message` 的 `tool-addition` 现在引用一个只包含被点名工具的
+  `request/header`（从全部 header 的工具定义表里取）；凑不齐定义就不写 `headerSeq`。
+  `headerSeq` 改为在状态事件合并之后按最终下标回填（之前会被合并挤位，指向别的行）。
+- **引用重映射**：`source.promptSeq` / `logFrom` / `logTo` / `rerunTurn` / `rerunTurnEnd` /
+  `carrierSeq` / `targetSeq` 统一按「源 seq → 消息行 → 合并后下标」重算；映射不到或不再更早则删除。
+  `marks` 仍指向块起点（状态事件插在那里才对），消息行另用 `rowIndexBySeq` 记录。
+- **载荷形状**：嵌套 `data.message` 的 user/assistant 行补回 `data.source`（扁平载荷本来就有），
+  不再丢掉 kind / rerun 归属。
+- 验证：`node --test` 54/54；对全机 104 份会话逐份跑 `applyRebuild`（隔离副本），104 通过、0 失败。
+
 **0.7.1** —— 修：重写/裁剪删掉 `goal/change`，把会话的 `/goal` 永久卡死。
 
 - 症状：会话里 `/goal …` 一律 `command.execute failed: gateway/internal: goal replay failed at session event N:
