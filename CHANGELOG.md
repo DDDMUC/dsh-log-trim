@@ -2,6 +2,23 @@
 
 ## 中文
 
+**0.7.1** —— 修：重写/裁剪删掉 `goal/change`，把会话的 `/goal` 永久卡死。
+
+- 症状：会话里 `/goal …` 一律 `command.execute failed: gateway/internal: goal replay failed at session event N:
+  goal round at session event N is not the next admitted round of the active goal`，重启也修不好。
+- 根因：`goal/change` 不是表面事件。`rebuildSurface`（折叠 / 重建）按可见表面重写日志时把它整条丢掉，
+  而目标轮次（普通 `user/message`）作为表面节点留了下来。宿主的格式校验不懂目标语义，这份日志能正常打开，
+  只有目标投影回放时整份报错。
+- 修 1（不再制造）：重建按原位置保留 `goal/change`，以及同样只被投影读取的 `todo/write`、`plan/mode`、
+  `schedule/change`、`team/*`、`feedback/*`、`working-directory/change`；`renumber` 不再把 `goal/change`
+  搬到日志最前面（搬了轮次就成了孤儿）。
+- 修 2（不再扩大）：任何裁剪/重写只要会让目标事件变少（窗口裁剪、清已遮蔽、重建、折叠）一律拒绝写入——
+  目标投影折叠的是**整份日志**，包括已被 replace 遮蔽的历史。
+- 修 3（修好存量）：启动扫描新增目标轮次修复：没有快照认领的孤儿轮次改回普通用户消息（内容与 seq 不动），
+  并删掉该会话的投影缓存（否则缓存里的 failure 行会继续被复用）。写入前后都过宿主校验器。
+- 验证：`node --test` 50/50；另用宿主自己的 `foldGoal` 在真实会话上验证：修复前在 event 816 报同一个错，
+  修复后通过。
+
 **0.7.0** —— 开机扫描搬进 worker；裁剪内核改异步；账本记录被裁部分的用量。
 
 - 整轮扫描在 `node:worker_threads` 里跑（`lib/worker.mjs`），主线程只等一份摘要；worker 起不来时退回主线程。
