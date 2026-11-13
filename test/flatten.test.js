@@ -76,3 +76,39 @@ test('折叠：没有载体时原样返回', () => {
   assert.equal(out.length, events.length)
   assert.equal(folded.edits + folded.reruns + folded.deletes, 0)
 })
+
+test('折叠：回复块补丁抄进正文，补丁记录消失', () => {
+  const events = []
+  let seq = 0
+  const push = (event) => {
+    events.push({ ...event, seq: seq++ })
+    return events[events.length - 1]
+  }
+  push({ type: 'system/message', data: { message: { id: 'sys', role: 'system', content: [{ type: 'text', text: 'sys' }] } }, surfaceOp: 'append' })
+  push({ type: 'turn/start', data: { turn: 1 } })
+  push({ type: 'step/start', data: { turn: 1, step: 1 } })
+  push({ type: 'user/message', data: { message: { id: 'u1', role: 'user', content: [{ type: 'text', text: 'q1' }] }, turn: 1, step: 1 }, surfaceOp: 'append' })
+  const answer = push({
+    type: 'assistant/message',
+    data: {
+      turn: 1,
+      step: 1,
+      message: { id: 'a1', role: 'assistant', content: [{ type: 'reasoning', text: 'think' }, { type: 'text', text: '1' }] },
+    },
+    surfaceOp: 'append',
+  })
+  push({ type: 'step/end', data: { turn: 1, step: 1 } })
+  push({ type: 'turn/end', data: { turn: 1 } })
+  push({
+    type: 'plugin:dsh-edit-turn/patch',
+    data: { version: 1, targets: [{ seq: answer.seq, blockIndex: 1, kind: 'text', text: '55' }] },
+    ignorable: true,
+  })
+
+  const { events: out, folded } = flattenHistory(events)
+  const rewritten = out.find((event) => event.type === 'assistant/message')
+  assert.equal(rewritten.data.message.content[1].text, '55', '补丁的文本抄回了正文块')
+  assert.equal(rewritten.data.message.content[0].text, 'think', '推理块原样保留')
+  assert.equal(out.some((event) => String(event.type).endsWith('/patch')), false, '补丁记录不再存在')
+  assert.equal(folded.patches, 1, '计入折叠统计')
+})
