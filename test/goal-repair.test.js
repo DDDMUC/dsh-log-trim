@@ -160,3 +160,22 @@ test('守卫：裁剪只要会让目标事件变少就必须拒绝', () => {
   // 一条目标事件都没有的会话不受影响。
   assert.doesNotThrow(() => assertGoalEventsKept([{ seq: 0, type: 'turn/start' }], []))
 })
+
+test('重建：被插件替换覆盖的 goal 轮次不复活，其余照旧保留', () => {
+  // 一条 rerun 载体盖住第 1 轮的 goal 轮次消息：用户明确删过它，重建时不该
+  // 因为我们「保留 goal 消息」的逻辑把它再塞回来。
+  const events = goalSession()
+  const goalRound = events.find((event) => event.type === 'user/message' && event.data?.source?.kind === 'goal')
+  events.push({
+    seq: events.length,
+    time: 3000,
+    type: 'user/message',
+    data: { message: { role: 'user', content: [{ type: 'text', text: '\u200b' }] }, source: { kind: 'plugin:dsh-rerun-turn' } },
+    surfaceOp: { op: 'replace', startSeq: goalRound.seq, endSeq: goalRound.seq },
+    sourceEventSeqs: [goalRound.seq],
+  })
+  const { events: out } = flattenHistory(events)
+  const rounds = out.filter((event) => event.type === 'user/message' && event.data?.source?.kind === 'goal')
+  assert.equal(rounds.length, 1, '被覆盖的那条没复活，另一条仍在')
+  assert.notEqual(rounds[0].seq, goalRound.seq, '活下来的是没被覆盖的那条')
+})
