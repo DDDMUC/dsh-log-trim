@@ -2,6 +2,12 @@
 
 ## 中文
 
+**0.8.2** —— 用户设的标题不再被补 messageSeqs。
+
+- 重建时会给标题补一个「更早的消息」引用，但用户自己设的标题（`source.kind === 'user'`）必须保持 `messageSeqs` 为空，否则宿主整份拒收：`messageSeqs must be empty exactly for a user title`。
+- 这是 0.8.1 让带 goal 的大会话能进重建之后才暴露的：那条会话的标题是手改过的。
+- 实测同一条 12600 事件的会话：折叠 12600 → 1393，goal 轮次 36 全留、goal/change 42 全留，校验通过。
+
 **0.8.1** —— 带 goal 的会话终于能折叠了。
 
 - 折叠走「按可见表面重建」，而 goal 的轮次消息（`source.kind === 'goal'`）不在可见表面上（多被 compaction 摘要遮蔽），于是被顺手丢掉，`/goal` 会永久报 `goal replay failed`，插件只能放弃这次写入。
